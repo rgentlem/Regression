@@ -1,0 +1,256 @@
+---
+title: "Logistic Regression"
+output: ioslides_presentation
+date: "2025-02-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library("vcdExtra")
+library(kableExtra)
+```
+
+## Logistic Regression
+
+In this lecture we will consider logistic regression. We will **not** delve into generalized linear models (GLMS) or other important regression models.  Our goal is to get a working knowledge of logistic regression and how to interpret and understand it.
+
+The contents of this lecture are based on several different text books, and lectures that others have put on line. I will try to give credit where it is due.
+
+The first set of slides are adapted from a lecture dated April, 2013 by Colin Rundel (https://www2.stat.duke.edu/~cr173/) who has put a large number of lectures and GitHub repos on line. 
+
+ Useful Reference: 
+ <font size="3">https://www.academia.dk/BiologiskAntropologi/Epidemiologi/PDF/Introductory_Statistics_with_R__2nd_ed.pdf</font>
+
+## Motivation
+- In many situations the response we want to measure is not a continuous variable
+- Logistic regression helps us to model the outcomes like whether someone got a disease or tested positive for an infection
+- The sorts of questions we are interested in are often of the form: *Does exposure A increase or decrease the risk of getting disease D*
+- *risk* refers to the probability of an event occurring out of all possible outcomes, while *odds* represent the ratio of the probability of an event happening to the probability of it not happening
+
+- for logistic regression we are modeling the odds
+
+## Odds
+
+For some event $E$ ,
+\[
+odds(E ) =  \frac{P(E)}{P(E^c)} = \frac{P(E)}{1-P(E)}
+\]
+Similarly, if we are told the odds of $E$ are $x$ to $y$ then
+\[
+  odds(E) = \frac{x}{y} = \frac{x/(x+y)}{y/(x+y)}
+\]
+which implies
+ $P(E ) = x/(x + y )$ and $P(E^c ) = y /(x + y )$
+
+## Donner Party
+
+The Donner Party was a group of settlers migrating to California in 1846. They were trapped by an early blizzard on the eastern side of the Sierra Nevada mountains, and before they could be rescued, nearly half of the party had died.
+
+What factors affected who lived and who died?
+
+```{r data, echo = FALSE}
+data(Donner)
+#fix up labels
+surv = factor(x=ifelse(Donner$survived==1,"Survived", "Died"))
+Donner$survived = surv
+kable(Donner[1:5,],
+      caption = "Donner Party")
+
+```
+## A quick look
+
+<div class="columns-2">
+```{r tables, fig.width=4}
+t1 = table(Donner$sex,Donner$survived)
+kable(t1)
+```
+```{r bxp, fig.width=4}
+boxplot(Donner$age ~ Donner$survived, ylab="Age")
+```
+
+## Generalized Linear Models
+
+Generalized linear models have the following three properites:
+
+1) A probability distribution, with some parameters that describe the variation in
+the outcome variable
+
+2)  A linear (in the covariates) model:
+\[
+ \eta = \beta_0 + \beta_1 * X_1 + \ldots + \beta_n * X_n
+\]
+
+3) A link function relating the linear model to the parameters of the
+outcome distribution
+
+\[
+g (p) = \eta \quad or \quad p= g^{−1}(\eta)
+\]
+
+## The Logit Function
+
+In this example we want to model a binary variable (Died vs Survived) as a function
+of some covariates.
+
+We can assume a binomial distribution 
+and model $p$ the probability of success for a given set of
+predictors, $\eta$
+
+To we just need to identify a link function that connects $\eta$  to $p$. 
+There are many options but the most commonly used is the logit function.
+
+![](logit.png)
+<!--
+$$
+
+logit(p) = \log ( \frac{p}{1-p} ), \qquad for \quad 0 \leq p \leq 1
+
+$$
+-->
+
+which is the log of the *odds* of a success.
+
+## Properties of the Logit Function
+
+
+- the logit function maps values between $0$ and $1$ to values between $-\infty$ and $\infty$
+
+```{r plotlogit}
+logit = function(x) log(x/(1-x))
+x = seq(0.05,.995,by=0.05)
+logitx = log(x/(1-x))
+plot(x, logitx, type="l", lwd=3, col="slategrey")
+
+```
+
+## The inverse of the logit
+
+<div class="columns-2">
+
+- we can find the inverse function, simply by rearranging the equation for the logit
+
+$$
+\begin{align}
+g^{−1} (x) &=  \frac{ \exp(x)} {1 + exp(x)} \nonumber \\
+           &=  \frac{1}{1+exp(-x)}
+\end{align}
+$$
+
+- $g^{−1} (x)$ maps from the real line into $[0,1]$
+
+```{r invlogit, fig.width=4}
+invlogit = function(x) 1/(1+exp(-x))
+
+x = seq(-10,10, by=0.2)
+plot(x, invlogit(x), type="l", lwd=2, col="seagreen")
+
+
+```
+
+</div>
+
+
+## Logistic Regression Model
+
+The model is then:
+
+$$
+       y_i = \mbox{Binomial}(p_i)  \\
+       \eta_i = \beta_0 + \beta_1 * X_{i,1} + \ldots + \beta_n * X_{i,n} \\
+$$
+with $logit(p_i) = \eta_i$
+ 
+
+## Fitting the model
+
+In R we use the `glm` function as shown below
+
+```{r glm1, echo=TRUE}
+
+glm1 = glm(survived ~ age, data=Donner, family=binomial)
+summary(glm1)
+```
+
+## Interpreting the model {.smaller}
+
+<div class="columns-2">
+
+The model says that $logit(p) = 0.868 + -0.035*age$
+
+And hence at age 5, $p = 1/(1+exp(-0.868 + 0.035*5))$
+
+The `predict` function in R can be used to obtain predictions
+
+`predict(glm1, newdata=data.frame(age=5), type="response")`
+
+
+```{r glmplot, echo=FALSE, fig.width=4}
+
+plot(Donner$age, ifelse(Donner$survived=="Survived",1,0), pch=19, col="lightblue", xlab="Age", ylab="Survived")
+pred = predict(glm1, newdata=data.frame(age=1:70), type="response")
+lines(1:70, pred, lwd=2, col="cornflowerblue")
+
+```
+
+</div>
+
+## Exercise
+
+- Fit a model that includes sex
+- Did males or females have a higher probability of survival?
+- Use the estimated coefficient for sex to add two lines to the plot of survived versus age, one for males and one for females
+
+## Inference about the parameters
+
+- the covariate estimates are the given below
+```{r sexmodel, echo=FALSE, message=FALSE, warning=FALSE}
+glm2 = glm(survived ~ age+sex, data=Donner, family=binomial)
+
+##from ChatGPT - updated to the modern pipe
+library(broom)
+library(dplyr)
+logit_summary <- tidy(glm2)  # Convert model output to a tidy format
+
+logit_summary |>
+  mutate(estimate = round(estimate, 3),  # Round coefficients
+         std.error = round(std.error, 3),
+         statistic = round(statistic, 3),
+         p.value = round(p.value, 3)) |>
+  kable("html", caption = "Logistic Regression Summary") |>
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover"))
+
+```
+
+- we use the same methods to make inference about them as we did for simple linear regression
+- you can fit interactions, splines and do most of the other manipulations for `glm` models as you can for `lm`
+
+## Inference about the model
+
+A part of the output of summary for the model with age and sex is below:
+
+(Dispersion parameter for binomial family taken to be 1)
+
+```{r eval=FALSE, echo=TRUE}
+    Null deviance: 124.37  on 89  degrees of freedom
+Residual deviance: 111.13  on 87  degrees of freedom
+AIC: 117.13
+```
+
+- the first comment is that the statement about the dispersion parameter reflects the fact
+that for the Binomial distribution the variance is determined by the mean
+- once we estimate $p$ then we have also estimated the variance
+- the AIC (Akaiki Information Criterion) which is −2logL+2k = 111.13 + 2*3 (-2logL is the residual deviance)
+
+## Model inference {.smaller}
+```{r modeltest, echo=TRUE}
+
+anova(glm2, test="Chisq")
+```
+
+The Deviance column gives differences between models as
+variables are added to the model in turn. 
+
+The deviances are approximately
+$\chi^2$ -distributed with the stated degrees of freedom. 
+
+It is necessary to add the test="chisq" argument to get the approximate χ2 tests.

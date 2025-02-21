@@ -1,0 +1,127 @@
+---
+title: "Nonlinear Logistic"
+output: html_document
+date: "2025-02-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Logistic regression with a nonlinear relationship
+
+In this code chunk we simulate a data set with a non-linear function in age and then
+simulate a large sample using the non-linear function to affect the probability of a *case*.
+
+```{r s1, echo=TRUE}
+
+set.seed(333)  # For reproducibility
+
+# Simulate Age variable
+n <- 5000  # Sample size
+age <- runif(n, 18, 80)  # Age uniformly distributed between 18 and 80
+
+#y = function(x) {
+#  y= ifelse(x < 60, y=20+3*x, 200+10*(x-60))
+#  return(y)
+#}
+
+eta = ifelse(age < 65, .1 - .02*age, -1.2 + 0.05*(age-65))
+# Define a non-linear function for log-odds (e.g., quadratic + sine component)
+#eta <- -3 + 0.05 * age - 0.001 * age^2 + 0.5 * sin(0.1 * age)
+
+# Convert to probabilities using logistic function
+prob <- 1 / (1 + exp(-eta))
+
+# Simulate binary outcome using Bernoulli distribution
+y <- rbinom(n, 1, prob)
+
+# Store in a dataframe
+data <- data.frame(age, y)
+
+```
+
+
+Next we fit a logistic regression model using a linear term, which should fit poorly, since the true relationship is known and is not linear.  Then we fit a natural spline model.  We compare the models using the `anova` function.
+
+```{r fitmodels, echo=TRUE}
+# Fit logistic model to check the relationship
+model1 = glm(y ~age, data=data, family = binomial)
+#model1 <- glm(y ~ poly(age, 2), data = data, family = binomial)
+summary(model1)
+library(splines)
+model2 <- glm(y ~ ns(age, df=7), data = data, family = binomial)
+```
+
+Compare the models:
+```{r comp}
+anova(model1, model2)
+```
+
+And then we get estimates of the predicted probabilities from those models so we can plot the true relationship, and the estimates from the two different models.
+```{r plotpreds}
+##get predictions for the probabilities from the models above
+nage=data.frame(age = seq(18,80,by=0.5))
+
+pred1 = predict(model1, newdata=nage, type="response")
+nd1 = data.frame(nage=nage, ny=pred1)
+pred2 = predict(model2, newdata=nage, type="response")
+nd2 = data.frame(nage=nage, ny = pred2)
+
+# Visualize the probability curve
+library(ggplot2)
+ggplot(data, aes(x = age, y = prob)) +
+  geom_point(alpha = 0.3) +
+  ylim(0,1) +
+  geom_line(data = nd1, aes(x=age, y=ny), color = "red", linewidth=1) +
+  geom_line(data = nd2, aes(x=age, y=ny), color = "cornflowerblue", linewidth=1) +
+  #geom_smooth(method = "loess", color = "blue") +
+  labs(title = "Simulated Probability of Outcome by Age",
+       x = "Age", y = "Probability of Y=1") +
+  theme_minimal()
+
+
+```
+
+**Exercise**
+
+
+Find the residuals from the regression using `model` and use a smoother to show that the residuals
+have trends that are related to age.  In OLS we would simply plot the residuals against the covariates,
+which you can also do for logistic regression, but due to the nature of residuals using logistic regression it is important to use some smoothing.
+
+
+
+## An irrelevant covariate
+
+And now we create a covariate, that is unrelated to age, but where the covariate is more likely to be one for older individuals. 
+Importantly it is not related to outcome, but it is related to age.
+
+```{r}
+onmeds=rep(NA,length(age))
+for(i in 1:length(age)) {
+  if(age[i]<65) p=.007 else p=.85
+  onmeds[i] = rbinom(1,1,prob=p)
+}
+##onmeds = ifelse(x<50, rbinom(1,1,prob=.1), rbinom(1,1,prob=.5))
+table(onmeds)
+table(onmeds, age<65)
+chisq.test(table(onmeds, age<65))
+
+##check about y and age
+table(y, age<65)
+chisq.test(table(y, age<65))
+```
+
+And now we can check out our model.
+
+```{r glms}
+glmc1 = glm(y ~ age + onmeds, data=data, family = binomial)
+#model1 <- glm(y ~ poly(age, 2), data = data, family = binomial)
+summary(glmc1)
+
+glmc2 <- glm(y ~ ns(age, df=5) + onmeds, data = data, family = binomial)
+summary(glmc2)
+
+
+```
